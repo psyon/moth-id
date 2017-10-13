@@ -88,7 +88,7 @@ def classify_image(file_name, return_filename=False):
         filtered.append(i)
 
     filtered = filtered[:5]
-    return_array.append("%s (%d%%, %d%%)" % (species_labels[i].split(' ', 1)[1], results[0] * 100, (results[0] / total) * 100))
+    return_array.append("%s (%d%%, %d%%)" % (species_labels[filtered[0]].split(' ', 1)[1], results[filtered[0]] * 100, (results[filtered[0]] / total) * 100))
     for i in filtered:
         return_value += "    %s (%d%%, %d%%)\n" % (species_labels[i].split(' ', 1)[1], results[i] * 100, (results[i] / total) * 100)
 
@@ -174,6 +174,7 @@ class MothID(QMainWindow):
 
     def initUI(self):
         self.setWindowTitle("Moth ID")
+        self.setWindowIcon(QIcon('moth.ico'))
         widget = QWidget(self)
         self.setCentralWidget(widget)
         layout = QVBoxLayout()
@@ -226,7 +227,7 @@ class MothID(QMainWindow):
         self.resizeUI()
 
         QApplication.setOverrideCursor(Qt.WaitCursor)
-        self.text.setText(classify_image(path, false))
+        self.text.setText(classify_image(path, False))
         QApplication.restoreOverrideCursor()
         return
 
@@ -243,13 +244,11 @@ class MothID(QMainWindow):
             if not os.path.isdir(result_path):
                 os.mkdir(result_path)
 
-            print(os.path.join(path, "*.{bmp,gif,jpg,jpeg,png}"))
             files = glob.glob(os.path.join(path, "*.bmp"))
             files.extend(glob.glob(os.path.join(path, "*.gif")))
             files.extend(glob.glob(os.path.join(path, "*.jpg")))
             files.extend(glob.glob(os.path.join(path, "*.jpeg")))
             files.extend(glob.glob(os.path.join(path, "*.png")))
-            print(len(files))
 
             progdialog = QProgressDialog("", "Cancel", 0, len(files), self)
             progdialog.setWindowTitle("Classifying")
