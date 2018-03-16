@@ -14,11 +14,11 @@ from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 
-family_model   = "mothfamily-20171004.pb"
+family_model   = "mothfamily-20180316.pb"
 family_labels  = "family.txt"
 genus_model    = "mothgenus-20171007.pb"
 genus_labels   = "genus.txt"
-species_model  = "mothspecies-20171005.pb"
+species_model  = "mothspecies-20180316.pb"
 species_labels = "species.txt"
 input_height   = 299
 input_width    = 299
@@ -275,11 +275,11 @@ class MothID(QMainWindow):
 
 if __name__ == '__main__':
     family_graph = load_graph(family_model)
-    genus_graph = load_graph(genus_model)
+    #genus_graph = load_graph(genus_model)
     species_graph = load_graph(species_model)
 
     family_labels = load_labels(family_labels)
-    genus_labels = load_labels(genus_labels)
+    #genus_labels = load_labels(genus_labels)
     species_labels = load_labels(species_labels)
 
     app = QApplication(sys.argv)
