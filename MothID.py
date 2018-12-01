@@ -14,12 +14,6 @@ from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 
-family_model   = "mothfamily-20180316.pb"
-family_labels  = "family.txt"
-genus_model    = "mothgenus-20171007.pb"
-genus_labels   = "genus.txt"
-species_model  = "mothspecies-20180316.pb"
-species_labels = "species.txt"
 input_height   = 299
 input_width    = 299
 input_mean     = 0
@@ -27,116 +21,134 @@ input_std      = 255
 input_layer    = "input"
 output_layer   = "InceptionV3/Predictions/Reshape_1"
 
-use_family  = True
+use_family  = False
 use_genus   = False
-use_species = True
+use_species = False
+
+def _most_recent_model(prefix):
+    files = glob.glob("models/" + prefix +  "*.pb")
+    if len(files) > 0:
+        files.sort(reverse=True)
+        labels = files[0].replace(".pb", ".txt");
+        return files[0], labels
+    return None,None
 
 def classify_image(file_name, return_filename=False):
-  t = read_tensor_from_image_file(file_name, input_height=input_height, input_width=input_width, input_mean=input_mean, input_std=input_std)
-  input_name = "import/" + input_layer
-  output_name = "import/" + output_layer
+    t = read_tensor_from_image_file(file_name, input_height=input_height, input_width=input_width, input_mean=input_mean, input_std=input_std)
+    input_name = "import/" + input_layer
+    output_name = "import/" + output_layer
 
-  return_value = ""
-  return_array = []
+    return_value = ""
+    return_array = []
 
-  if(use_family):
-    input_operation = family_graph.get_operation_by_name(input_name);
-    output_operation = family_graph.get_operation_by_name(output_name);
-    with tf.Session(graph=family_graph) as sess:
-      results = sess.run(output_operation.outputs[0], {input_operation.outputs[0]: t})
-    results = np.squeeze(results)
-    predictions = results.argsort()[::-1]
-    prediction = predictions[0]
+    prefix = ""
+    indent = ""
 
-    return_value += "Family: %s (%d%%)\n" % (family_labels[prediction], results[prediction] * 100)
-    return_array.append("%s (%d%%)" % (family_labels[prediction], results[prediction] * 100))
-    prefix = family_labels[predictions[0]] + " "
+    if use_family:
+        input_operation = family_graph.get_operation_by_name(input_name);
+        output_operation = family_graph.get_operation_by_name(output_name);
+        with tf.Session(graph=family_graph) as sess:
+            results = sess.run(output_operation.outputs[0], {input_operation.outputs[0]: t})
+        results = np.squeeze(results)
+        predictions = results.argsort()[::-1]
+        prediction = predictions[0]
 
-  if(use_genus):
-    input_operation = genus_graph.get_operation_by_name(input_name);
-    output_operation = genus_graph.get_operation_by_name(output_name);
-    with tf.Session(graph=genus_graph) as sess:
-      results = sess.run(output_operation.outputs[0], {input_operation.outputs[0]: t})
-    results = np.squeeze(results)
-    predictions = results.argsort()[::-1]
+        return_value += "%s (%d%%)\n" % (family_labels[prediction], results[prediction] * 100)
+        return_array.append("%s (%d%%)" % (family_labels[prediction], results[prediction] * 100))
+        prefix = family_labels[predictions[0]] + " "
+        indent = "    "
 
-    total = 0
-    filtered = []
-    for i in predictions:
-      if(genus_labels[i].startswith(prefix)):
-        total += results[i]
-        filtered.append(i)
+    if use_genus:
+        input_operation = genus_graph.get_operation_by_name(input_name);
+        output_operation = genus_graph.get_operation_by_name(output_name);
+        with tf.Session(graph=genus_graph) as sess:
+            results = sess.run(output_operation.outputs[0], {input_operation.outputs[0]: t})
+        results = np.squeeze(results)
+        predictions = results.argsort()[::-1]
 
-    prediction = filtered[0]
-    return_value += "  Genus: %s (%d%%, %d%%)\n" % (genus_labels[prediction].split()[1], results[prediction] * 100, (results[prediction] / total) * 100)
-    return_array.append("%s (%d%%, %d%%)" % (genus_labels[prediction].split()[1], results[prediction] * 100, (results[prediction] / total) * 100))
-    prefix = genus_labels[filtered[0]] + " "
+        total = 0
+        filtered = []
+        for i in predictions:
+            if(genus_labels[i].startswith(prefix)):
+                total += results[i]
+                filtered.append(i)
 
-  if(use_species):
-    input_operation = species_graph.get_operation_by_name(input_name);
-    output_operation = species_graph.get_operation_by_name(output_name);
-    with tf.Session(graph=species_graph) as sess:
-      results = sess.run(output_operation.outputs[0], {input_operation.outputs[0]: t})
-    results = np.squeeze(results)
-    predictions = results.argsort()[::-1]
+        prediction = filtered[0]
+        return_value += "%s%s (%d%%, %d%%)\n" % (indent, genus_labels[prediction].split()[1], results[prediction] * 100, (results[prediction] / total) * 100)
+        return_array.append("%s (%d%%, %d%%)" % (genus_labels[prediction].split()[1], results[prediction] * 100, (results[prediction] / total) * 100))
+        prefix = genus_labels[filtered[0]] + " "
+        indent = indent + "    "
 
-    total = 0
-    filtered = []
-    for i in predictions:
-      if(species_labels[i].startswith(prefix)):
-        total += results[i]
-        filtered.append(i)
+    if use_species:
+        input_operation = species_graph.get_operation_by_name(input_name);
+        output_operation = species_graph.get_operation_by_name(output_name);
+        with tf.Session(graph=species_graph) as sess:
+            results = sess.run(output_operation.outputs[0], {input_operation.outputs[0]: t})
+        results = np.squeeze(results)
+        predictions = results.argsort()[::-1]
 
-    filtered = filtered[:5]
-    return_array.append("%s (%d%%, %d%%)" % (species_labels[filtered[0]].split(' ', 1)[1], results[filtered[0]] * 100, (results[filtered[0]] / total) * 100))
-    for i in filtered:
-        return_value += "    %s (%d%%, %d%%)\n" % (species_labels[i].split(' ', 1)[1], results[i] * 100, (results[i] / total) * 100)
+        total = 0
+        filtered = []
+        for i in predictions:
+            if(species_labels[i].startswith(prefix)):
+                total += results[i]
+                filtered.append(i)
 
-    if(return_filename):
-        return ' - '.join(return_array)
+        filtered = filtered[:5]
+
+        if len(filtered) > 0:
+            name = species_labels[filtered[0]].replace(prefix, "")
+            return_array.append("%s (%d%%, %d%%)" % (name, results[filtered[0]] * 100, (results[filtered[0]] / total) * 100))
+
+            for i in filtered:
+                name = species_labels[i].replace(prefix, "")
+                return_value += "%s%s (%d%%, %d%%)\n" % (indent, name, results[i] * 100, (results[i] / total) * 100)
+
+        if(return_filename):
+            return ' - '.join(return_array)
 
     return return_value
 
 def load_graph(model_file):
-  graph = tf.Graph()
-  graph_def = tf.GraphDef()
+    graph = tf.Graph()
+    graph_def = tf.GraphDef()
 
-  with open(model_file, "rb") as f:
-    graph_def.ParseFromString(f.read())
-  with graph.as_default():
-    tf.import_graph_def(graph_def)
+    with open(model_file, "rb") as f:
+        graph_def.ParseFromString(f.read())
+    with graph.as_default():
+        tf.import_graph_def(graph_def)
 
-  return graph
+    return graph
 
 def read_tensor_from_image_file(file_name, input_height=299, input_width=299, input_mean=0, input_std=255):
-  input_name = "file_reader"
-  output_name = "normalized"
-  file_reader = tf.read_file(file_name, input_name)
+    input_name = "file_reader"
+    output_name = "normalized"
+    file_reader = tf.read_file(file_name, input_name)
 
-  if file_name.endswith(".png"):
-    image_reader = tf.image.decode_png(file_reader, channels = 3, name='png_reader')
-  elif file_name.endswith(".gif"):
-    image_reader = tf.squeeze(tf.image.decode_gif(file_reader, name='gif_reader'))
-  elif file_name.endswith(".bmp"):
-    image_reader = tf.image.decode_bmp(file_reader, name='bmp_reader')
-  else:
-    image_reader = tf.image.decode_jpeg(file_reader, channels = 3, name='jpeg_reader')
+    if file_name.endswith(".png"):
+        image_reader = tf.image.decode_png(file_reader, channels = 3, name='png_reader')
+    elif file_name.endswith(".gif"):
+        image_reader = tf.squeeze(tf.image.decode_gif(file_reader, name='gif_reader'))
+    elif file_name.endswith(".bmp"):
+        image_reader = tf.image.decode_bmp(file_reader, name='bmp_reader')
+    else:
+        image_reader = tf.image.decode_jpeg(file_reader, channels = 3, name='jpeg_reader')
 
-  float_caster = tf.cast(image_reader, tf.float32)
-  dims_expander = tf.expand_dims(float_caster, 0);
-  resized = tf.image.resize_bilinear(dims_expander, [input_height, input_width])
-  normalized = tf.divide(tf.subtract(resized, [input_mean]), [input_std])
-  sess = tf.Session()
-  result = sess.run(normalized)
+    float_caster = tf.cast(image_reader, tf.float32)
+    dims_expander = tf.expand_dims(float_caster, 0);
+    resized = tf.image.resize_bilinear(dims_expander, [input_height, input_width])
+    normalized = tf.divide(tf.subtract(resized, [input_mean]), [input_std])
+    sess = tf.Session()
+    result = sess.run(normalized)
 
-  return result
+    return result
 
 def load_labels(label_file):
-  label = []
-  proto_as_ascii_lines = tf.gfile.GFile(label_file).readlines()
-  for l in proto_as_ascii_lines:
-    label.append(l.rstrip())
-  return label
+    label = []
+    proto_as_ascii_lines = tf.gfile.GFile(label_file).readlines()
+    for l in proto_as_ascii_lines:
+        label.append(l.rstrip())
+    return label
 
 class ImageLabel(QLabel):
     def __init__(self, image):
@@ -274,13 +286,24 @@ class MothID(QMainWindow):
         return
 
 if __name__ == '__main__':
-    family_graph = load_graph(family_model)
-    #genus_graph = load_graph(genus_model)
-    species_graph = load_graph(species_model)
+    family_model, family_labels = _most_recent_model("mothfamilies")
+    genus_model, genus_labels = _most_recent_model("mothgenus")
+    species_model, species_labels = _most_recent_model("mothspecies")
 
-    family_labels = load_labels(family_labels)
-    #genus_labels = load_labels(genus_labels)
-    species_labels = load_labels(species_labels)
+    if family_model:
+        use_family = True
+        family_graph = load_graph(family_model)
+        family_labels = load_labels(family_labels)
+
+    if genus_model:
+        use_genus = True
+        genus_graph = load_graph(genus_model)
+        genus_labels = load_labels(genus_labels)
+
+    if species_model:
+        use_species = True
+        species_graph = load_graph(species_model)
+        species_labels = load_labels(species_labels)
 
     app = QApplication(sys.argv)
     win = MothID()
