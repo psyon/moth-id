@@ -160,9 +160,13 @@ class ClassifyDirectoryThread(QThread):
     def __init__(self, path):
         QThread.__init__(self)
         self.path = path
+        self.running = True
 
     def __del__(self):
         self.wait()
+
+    def stop(self):
+        self.running = False
 
     def run(self):
         result_path = os.path.join(self.path, "results")
@@ -179,6 +183,9 @@ class ClassifyDirectoryThread(QThread):
 
         i = 0
         for file in files:
+            if not self.running:
+                break;
+
             result = classify_image(file, True)
             self.display.emit(file)
             self.result.emit(result)
@@ -242,7 +249,11 @@ class MothID(QMainWindow):
 
     def dropEvent(self, e):
         path = str(e.mimeData().urls()[0].toLocalFile())
-        self.displayAndClassifyImage(path)
+
+        if os.path.isdir(path):
+            self.classifyDirectory(path)
+        else:
+            self.displayAndClassifyImage(path)
 
     def initUI(self):
         self.setWindowTitle("Moth ID")
@@ -312,15 +323,20 @@ class MothID(QMainWindow):
 
     def signalCancel(self):
         if self.thread:
-            self.thread.quit()
+            self.thread.stop()
+            self.thread.wait()
+            self.thread = None
         if self.progdialog:
             self.progdialog.close()
+            self.progdialog = None
 
     def signalImageCount(self, count):
-        self.progdialog.setMaximum(count)
+        if self.progdialog:
+            self.progdialog.setMaximum(count)
 
     def signalProgress(self, value):
-        self.progdialog.setValue(value)
+        if self.progdialog:
+            self.progdialog.setValue(value)
 
     def signalComplete(self):
         if self.progdialog:
@@ -335,22 +351,25 @@ class MothID(QMainWindow):
         if(path[0]):
             self.displayAndClassifyImage(path[0])
 
-    def classifyDirectory(self):
+    def classifyDirectory(self, path):
+        self.progdialog = QProgressDialog("", "Cancel", 0, 100, self)
+        self.progdialog.setWindowTitle("Classifying")
+        self.progdialog.setWindowModality(Qt.WindowModal)
+        self.progdialog.canceled.connect(self.signalCancel)
+        self.progdialog.show()
+
+        self.thread = ClassifyDirectoryThread(path)
+        self.thread.count.connect(self.signalImageCount)
+        self.thread.display.connect(self.displayImage)
+        self.thread.result.connect(self.signalResult)
+        self.thread.progress.connect(self.signalProgress)
+        self.thread.complete.connect(self.signalComplete)
+        self.thread.start()
+
+    def menuClassifyDirectory(self):
         path = QFileDialog.getExistingDirectory(self, "Choose a directory", "", QFileDialog.ShowDirsOnly)
         if(path):
-            self.progdialog = QProgressDialog("", "Cancel", 0, 100, self)
-            self.progdialog.setWindowTitle("Classifying")
-            self.progdialog.setWindowModality(Qt.WindowModal)
-            self.progdialog.canceled.connect(self.signalCancel)
-            self.progdialog.show()
-
-            self.thread = ClassifyDirectoryThread(path)
-            self.thread.count.connect(self.signalImageCount)
-            self.thread.display.connect(self.displayImage)
-            self.thread.result.connect(self.signalResult)
-            self.thread.progress.connect(self.signalProgress)
-            self.thread.complete.connect(self.signalComplete)
-            self.thread.start()
+            self.classifyDirectory(path)
 
 if __name__ == '__main__':
     family_model, family_labels = _most_recent_model("mothfamilies")
