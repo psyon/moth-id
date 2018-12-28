@@ -150,6 +150,63 @@ def load_labels(label_file):
         label.append(l.rstrip())
     return label
 
+class ClassifyDirectoryThread(QThread):
+    count = pyqtSignal(int)
+    display = pyqtSignal('QString')
+    result = pyqtSignal('QString')
+    progress = pyqtSignal(int)
+    complete = pyqtSignal()
+
+    def __init__(self, path):
+        QThread.__init__(self)
+        self.path = path
+
+    def __del__(self):
+        self.wait()
+
+    def run(self):
+        result_path = os.path.join(self.path, "results")
+        if not os.path.isdir(result_path):
+            os.mkdir(result_path)
+
+        files = glob.glob(os.path.join(self.path, "*.bmp"))
+        files.extend(glob.glob(os.path.join(self.path, "*.gif")))
+        files.extend(glob.glob(os.path.join(self.path, "*.jpg")))
+        files.extend(glob.glob(os.path.join(self.path, "*.jpeg")))
+        files.extend(glob.glob(os.path.join(self.path, "*.png")))
+
+        self.count.emit(len(files))
+
+        i = 0
+        for file in files:
+            result = classify_image(file, True)
+            self.display.emit(file)
+            self.result.emit(result)
+            self.progress.emit(i)
+
+            file_name, file_ext = os.path.splitext(os.path.basename(file))
+            destination = os.path.join(result_path, file_name + " - " + result + file_ext)
+            shutil.copyfile(file, destination)
+            i += 1
+
+        self.complete.emit()
+
+class ClassifyImageThread(QThread):
+    result = pyqtSignal('QString')
+    complete = pyqtSignal()
+
+    def __init__(self, path):
+        QThread.__init__(self)
+        self.path = path
+
+    def __del__(self):
+        self.wait()
+
+    def run(self):
+        result = classify_image(self.path, False)
+        self.result.emit(result)
+        self.complete.emit()
+
 class ImageLabel(QLabel):
     def __init__(self, image):
         super(ImageLabel, self).__init__("")
@@ -169,6 +226,9 @@ class ImageLabel(QLabel):
         return self.pixmap.height()
 
 class MothID(QMainWindow):
+    progdialog = None
+    thread = None
+
     def __init__(self):
         super(MothID, self).__init__()
         self.setAcceptDrops(True)
@@ -234,56 +294,63 @@ class MothID(QMainWindow):
     def resizeUI(self):
         self.resize(self.label.width(), self.label.height() + self.menuBar().height() + + 150);
 
-    def displayAndClassifyImage(self, path):
+    def displayImage(self, path):
         self.label.setImage(path)
         self.resizeUI()
 
+    def displayAndClassifyImage(self, path):
+        self.displayImage(path)
+        self.text.setText('')
+
         QApplication.setOverrideCursor(Qt.WaitCursor)
-        self.text.setText(classify_image(path, False))
-        QApplication.restoreOverrideCursor()
+
+        self.thread = ClassifyImageThread(path)
+        self.thread.result.connect(self.signalResult)
+        self.thread.complete.connect(self.signalComplete)
+        self.thread.start()
         return
+
+    def signalCancel(self):
+        if self.thread:
+            self.thread.quit()
+        if self.progdialog:
+            self.progdialog.close()
+
+    def signalImageCount(self, count):
+        self.progdialog.setMaximum(count)
+
+    def signalProgress(self, value):
+        self.progdialog.setValue(value)
+
+    def signalComplete(self):
+        if self.progdialog:
+            self.progdialog.close()
+        QApplication.restoreOverrideCursor()
+
+    def signalResult(self, result):
+        self.text.setText(result)
 
     def classifyImage(self):
         path = QFileDialog.getOpenFileName(self, "Choose an image", "", "Images (*.bmp *.gif *.jpg *.jpeg *.png)")
         if(path[0]):
             self.displayAndClassifyImage(path[0])
-        return
 
     def classifyDirectory(self):
         path = QFileDialog.getExistingDirectory(self, "Choose a directory", "", QFileDialog.ShowDirsOnly)
         if(path):
-            result_path = os.path.join(path, "results")
-            if not os.path.isdir(result_path):
-                os.mkdir(result_path)
+            self.progdialog = QProgressDialog("", "Cancel", 0, 100, self)
+            self.progdialog.setWindowTitle("Classifying")
+            self.progdialog.setWindowModality(Qt.WindowModal)
+            self.progdialog.canceled.connect(self.signalCancel)
+            self.progdialog.show()
 
-            files = glob.glob(os.path.join(path, "*.bmp"))
-            files.extend(glob.glob(os.path.join(path, "*.gif")))
-            files.extend(glob.glob(os.path.join(path, "*.jpg")))
-            files.extend(glob.glob(os.path.join(path, "*.jpeg")))
-            files.extend(glob.glob(os.path.join(path, "*.png")))
-
-            progdialog = QProgressDialog("", "Cancel", 0, len(files), self)
-            progdialog.setWindowTitle("Classifying")
-            progdialog.setWindowModality(Qt.WindowModal)
-            progdialog.show()
-
-            i = 0
-            for file in files:
-                if progdialog.wasCanceled():
-                    break
-
-                result = classify_image(file, True)
-
-                file_name, file_ext = os.path.splitext(os.path.basename(file))
-                destination = os.path.join(result_path, file_name + " - " + result + file_ext)
-                shutil.copyfile(file, destination)
-
-                progdialog.setValue(i)
-                i += 1
-
-            progdialog.close()
-
-        return
+            self.thread = ClassifyDirectoryThread(path)
+            self.thread.count.connect(self.signalImageCount)
+            self.thread.display.connect(self.displayImage)
+            self.thread.result.connect(self.signalResult)
+            self.thread.progress.connect(self.signalProgress)
+            self.thread.complete.connect(self.signalComplete)
+            self.thread.start()
 
 if __name__ == '__main__':
     family_model, family_labels = _most_recent_model("mothfamilies")
