@@ -241,6 +241,9 @@ class MothID(QMainWindow):
         self.setAcceptDrops(True)
         self.initUI()
 
+    def closeEvent(self, e):
+        self.quit()
+
     def dragEnterEvent(self, e):
         if e.mimeData().hasUrls:
             e.accept()
@@ -254,6 +257,10 @@ class MothID(QMainWindow):
             self.classifyDirectory(path)
         else:
             self.displayAndClassifyImage(path)
+
+    def quit(self):
+        app.quit()
+        sys.exit()
 
     def initUI(self):
         self.setWindowTitle("Moth ID")
@@ -271,12 +278,12 @@ class MothID(QMainWindow):
         directoryAct = QAction('Classify &Directory', self)
         directoryAct.setShortcut('Ctrl+D')
         directoryAct.setStatusTip('Classify all images in a directory')
-        directoryAct.triggered.connect(self.classifyDirectory)
+        directoryAct.triggered.connect(self.menuClassifyDirectory)
 
         exitAct = QAction('&Exit', self)
         exitAct.setShortcut('Ctrl+Q')
         exitAct.setStatusTip('Exit application')
-        exitAct.triggered.connect(qApp.quit)
+        exitAct.triggered.connect(self.quit)
 
         menubar = self.menuBar()
         fileMenu = menubar.addMenu('&File')
