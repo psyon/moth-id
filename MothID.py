@@ -21,14 +21,10 @@ input_std      = 255
 input_layer    = "input"
 output_layer   = "InceptionV3/Predictions/Reshape_1"
 
-use_family  = False
-use_genus   = False
-use_species = False
-
-def _most_recent_model(prefix):
-    files = glob.glob("models/" + prefix +  "*.pb")
+def _most_recent_model():
+    files = glob.glob("models/*.pb")
     if len(files) > 0:
-        files.sort(reverse=True)
+        files.sort(reverse=True, key=lambda name: name[-11:])
         labels = files[0].replace(".pb", ".txt");
         return files[0], labels
     return None,None
@@ -38,74 +34,20 @@ def classify_image(file_name, return_filename=False):
     input_name = "import/" + input_layer
     output_name = "import/" + output_layer
 
+    input_operation = species_graph.get_operation_by_name(input_name);
+    output_operation = species_graph.get_operation_by_name(output_name);
+    with tf.Session(graph=species_graph) as sess:
+        results = sess.run(output_operation.outputs[0], {input_operation.outputs[0]: t})
+    results = np.squeeze(results)
+    predictions = results.argsort()[:5:-1]
+    #prediction = predictions[0:5]
+
+    if(return_filename):
+        return "%s (%d%%)" % (species_labels[i], results[i] * 100)
+
     return_value = ""
-    return_array = []
-
-    prefix = ""
-    indent = ""
-
-    if use_family:
-        input_operation = family_graph.get_operation_by_name(input_name);
-        output_operation = family_graph.get_operation_by_name(output_name);
-        with tf.Session(graph=family_graph) as sess:
-            results = sess.run(output_operation.outputs[0], {input_operation.outputs[0]: t})
-        results = np.squeeze(results)
-        predictions = results.argsort()[::-1]
-        prediction = predictions[0]
-
-        return_value += "%s (%d%%)\n" % (family_labels[prediction], results[prediction] * 100)
-        return_array.append("%s (%d%%)" % (family_labels[prediction], results[prediction] * 100))
-        prefix = family_labels[predictions[0]] + " "
-        indent = "    "
-
-    if use_genus:
-        input_operation = genus_graph.get_operation_by_name(input_name);
-        output_operation = genus_graph.get_operation_by_name(output_name);
-        with tf.Session(graph=genus_graph) as sess:
-            results = sess.run(output_operation.outputs[0], {input_operation.outputs[0]: t})
-        results = np.squeeze(results)
-        predictions = results.argsort()[::-1]
-
-        total = 0
-        filtered = []
-        for i in predictions:
-            if(genus_labels[i].startswith(prefix)):
-                total += results[i]
-                filtered.append(i)
-
-        prediction = filtered[0]
-        return_value += "%s%s (%d%%, %d%%)\n" % (indent, genus_labels[prediction].split()[1], results[prediction] * 100, (results[prediction] / total) * 100)
-        return_array.append("%s (%d%%, %d%%)" % (genus_labels[prediction].split()[1], results[prediction] * 100, (results[prediction] / total) * 100))
-        prefix = genus_labels[filtered[0]] + " "
-        indent = indent + "    "
-
-    if use_species:
-        input_operation = species_graph.get_operation_by_name(input_name);
-        output_operation = species_graph.get_operation_by_name(output_name);
-        with tf.Session(graph=species_graph) as sess:
-            results = sess.run(output_operation.outputs[0], {input_operation.outputs[0]: t})
-        results = np.squeeze(results)
-        predictions = results.argsort()[::-1]
-
-        total = 0
-        filtered = []
-        for i in predictions:
-            if(species_labels[i].startswith(prefix)):
-                total += results[i]
-                filtered.append(i)
-
-        filtered = filtered[:5]
-
-        if len(filtered) > 0:
-            name = species_labels[filtered[0]].replace(prefix, "")
-            return_array.append("%s (%d%%, %d%%)" % (name, results[filtered[0]] * 100, (results[filtered[0]] / total) * 100))
-
-            for i in filtered:
-                name = species_labels[i].replace(prefix, "")
-                return_value += "%s%s (%d%%, %d%%)\n" % (indent, name, results[i] * 100, (results[i] / total) * 100)
-
-        if(return_filename):
-            return ' - '.join(return_array)
+    for i in predictions:
+        return_value += "%s (%d%%)\n" % (species_labels[i], results[i] * 100)
 
     return return_value
 
@@ -379,24 +321,11 @@ class MothID(QMainWindow):
             self.classifyDirectory(path)
 
 if __name__ == '__main__':
-    family_model, family_labels = _most_recent_model("mothfamilies")
-    genus_model, genus_labels = _most_recent_model("mothgenus")
-    species_model, species_labels = _most_recent_model("mothspecies")
+    species_model, species_labels = _most_recent_model()
+    species_graph = load_graph(species_model)
+    species_labels = load_labels(species_labels)
 
-    if family_model:
-        use_family = True
-        family_graph = load_graph(family_model)
-        family_labels = load_labels(family_labels)
-
-    if genus_model:
-        use_genus = True
-        genus_graph = load_graph(genus_model)
-        genus_labels = load_labels(genus_labels)
-
-    if species_model:
-        use_species = True
-        species_graph = load_graph(species_model)
-        species_labels = load_labels(species_labels)
+    print("Using %s\n" % (species_model))
 
     app = QApplication(sys.argv)
     win = MothID()
