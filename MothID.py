@@ -343,12 +343,15 @@ class MothID(QMainWindow):
 
 
 if __name__ == '__main__':
+    app = QApplication(sys.argv)
+
     species_model, species_labels = _most_recent_model()
+    if species_model == None:
+        QMessageBox.critical(None, "Error", "Could not find default model file.")
+        sys.exit(-1)
+
     species_graph = load_graph(species_model)
     species_labels = load_labels(species_labels)
 
-    print("Using %s\n" % (species_model))
-
-    app = QApplication(sys.argv)
     win = MothID()
     sys.exit(app.exec_())
