@@ -222,7 +222,7 @@ class MothID(QMainWindow):
         directoryAct.setStatusTip('Classify all images in a directory')
         directoryAct.triggered.connect(self.menuClassifyDirectory)
 
-	chooseAct = QAction('Choose &Model', self)
+        chooseAct = QAction('Choose &Model', self)
 	chooseAct.setShortcut('Ctrl+M')
 	chooseAct.setStatusTip('Choose a new model file for classifications.')
 	chooseAct.triggered.connect(self.chooseModelFile)
