@@ -223,9 +223,9 @@ class MothID(QMainWindow):
         directoryAct.triggered.connect(self.menuClassifyDirectory)
 
         chooseAct = QAction('Choose &Model', self)
-	chooseAct.setShortcut('Ctrl+M')
-	chooseAct.setStatusTip('Choose a new model file for classifications.')
-	chooseAct.triggered.connect(self.chooseModelFile)
+        chooseAct.setShortcut('Ctrl+M')
+        chooseAct.setStatusTip('Choose a new model file for classifications.')
+        chooseAct.triggered.connect(self.chooseModelFile)
 
         exitAct = QAction('&Exit', self)
         exitAct.setShortcut('Ctrl+Q')
