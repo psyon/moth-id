@@ -39,11 +39,11 @@ def classify_image(file_name, return_filename=False):
     with tf.Session(graph=species_graph) as sess:
         results = sess.run(output_operation.outputs[0], {input_operation.outputs[0]: t})
     results = np.squeeze(results)
-    predictions = results.argsort()[:5:-1]
-    #prediction = predictions[0:5]
+    predictions = results.argsort()[:-6:-1]
 
     if(return_filename):
-        return "%s (%d%%)" % (species_labels[i], results[i] * 100)
+        p = predictions[0]
+        return "%s (%d%%)" % (species_labels[p], results[p] * 100)
 
     return_value = ""
     for i in predictions:
@@ -205,7 +205,7 @@ class MothID(QMainWindow):
         sys.exit()
 
     def initUI(self):
-        self.setWindowTitle("Moth ID")
+        self.setWindowTitle("Moth ID - " + os.path.basename(species_model))
         self.setWindowIcon(QIcon('moth.ico'))
         widget = QWidget(self)
         self.setCentralWidget(widget)
@@ -222,6 +222,11 @@ class MothID(QMainWindow):
         directoryAct.setStatusTip('Classify all images in a directory')
         directoryAct.triggered.connect(self.menuClassifyDirectory)
 
+	chooseAct = QAction('Choose &Model', self)
+	chooseAct.setShortcut('Ctrl+M')
+	chooseAct.setStatusTip('Choose a new model file for classifications.')
+	chooseAct.triggered.connect(self.chooseModelFile)
+
         exitAct = QAction('&Exit', self)
         exitAct.setShortcut('Ctrl+Q')
         exitAct.setStatusTip('Exit application')
@@ -231,6 +236,8 @@ class MothID(QMainWindow):
         fileMenu = menubar.addMenu('&File')
         fileMenu.addAction(fileAct)
         fileMenu.addAction(directoryAct)
+        fileMenu.addSeparator()
+        fileMenu.addAction(chooseAct)
         fileMenu.addSeparator()
         fileMenu.addAction(exitAct)
 
@@ -319,6 +326,21 @@ class MothID(QMainWindow):
         path = QFileDialog.getExistingDirectory(self, "Choose a directory", "", QFileDialog.ShowDirsOnly)
         if(path):
             self.classifyDirectory(path)
+
+    def chooseModelFile(self):
+        global species_model, species_graph, species_labels
+        path = QFileDialog.getOpenFileName(self, "Choose a model file", "./models", "Models (*.pb)")
+        if(path[0]):
+            file_model  = path[0]
+            file_labels = path[0].replace(".pb", ".txt");
+            if os.path.exists(file_labels):
+                species_model = file_model
+                species_graph = load_graph(file_model)
+                species_labels = load_labels(file_labels)
+                self.setWindowTitle("Moth ID - " + os.path.basename(species_model))
+            else:
+                QMessageBox.warning(self, "Error", "Label file not found.")
+
 
 if __name__ == '__main__':
     species_model, species_labels = _most_recent_model()
