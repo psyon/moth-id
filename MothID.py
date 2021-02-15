@@ -8,7 +8,9 @@ import sys
 import glob
 
 import numpy as np
-import tensorflow as tf
+
+import tflite_runtime.interpreter as tflite
+from PIL import Image
 
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
@@ -22,24 +24,35 @@ input_layer    = "input"
 output_layer   = "InceptionV3/Predictions/Reshape_1"
 
 def _most_recent_model():
-    files = glob.glob("models/*.pb")
+    files = glob.glob("models/*.tflite")
     if len(files) > 0:
         files.sort(reverse=True, key=lambda name: name[-11:])
-        labels = files[0].replace(".pb", ".txt");
+        labels = files[0].replace(".tflite", ".txt");
         return files[0], labels
     return None,None
 
 def classify_image(file_name, return_filename=False):
-    t = read_tensor_from_image_file(file_name, input_height=input_height, input_width=input_width, input_mean=input_mean, input_std=input_std)
-    input_name = "import/" + input_layer
-    output_name = "import/" + output_layer
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+    floating_model = input_details[0]['dtype'] == np.float32
 
-    input_operation = species_graph.get_operation_by_name(input_name);
-    output_operation = species_graph.get_operation_by_name(output_name);
-    with tf.Session(graph=species_graph) as sess:
-        results = sess.run(output_operation.outputs[0], {input_operation.outputs[0]: t})
-    results = np.squeeze(results)
-    predictions = results.argsort()[:-6:-1]
+    # Load the image
+    height = input_details[0]['shape'][1]
+    width = input_details[0]['shape'][2]
+    img = Image.open(file_name).resize((width, height))
+
+    input_data = np.expand_dims(img, axis=0)
+
+    if floating_model:
+        input_data = (np.float32(input_data) - input_mean) / input_std
+
+    # run inference
+    interpreter.set_tensor(input_details[0]['index'], input_data)
+    interpreter.invoke()
+
+    output_data = interpreter.get_tensor(output_details[0]['index'])
+    results = np.squeeze(output_data)
+    predictions = results.argsort()[-5:][::-1]
 
     if(return_filename):
         p = predictions[0]
@@ -51,46 +64,9 @@ def classify_image(file_name, return_filename=False):
 
     return return_value
 
-def load_graph(model_file):
-    graph = tf.Graph()
-    graph_def = tf.GraphDef()
-
-    with open(model_file, "rb") as f:
-        graph_def.ParseFromString(f.read())
-    with graph.as_default():
-        tf.import_graph_def(graph_def)
-
-    return graph
-
-def read_tensor_from_image_file(file_name, input_height=299, input_width=299, input_mean=0, input_std=255):
-    input_name = "file_reader"
-    output_name = "normalized"
-    file_reader = tf.read_file(file_name, input_name)
-
-    if file_name.endswith(".png"):
-        image_reader = tf.image.decode_png(file_reader, channels = 3, name='png_reader')
-    elif file_name.endswith(".gif"):
-        image_reader = tf.squeeze(tf.image.decode_gif(file_reader, name='gif_reader'))
-    elif file_name.endswith(".bmp"):
-        image_reader = tf.image.decode_bmp(file_reader, name='bmp_reader')
-    else:
-        image_reader = tf.image.decode_jpeg(file_reader, channels = 3, name='jpeg_reader')
-
-    float_caster = tf.cast(image_reader, tf.float32)
-    dims_expander = tf.expand_dims(float_caster, 0);
-    resized = tf.image.resize_bilinear(dims_expander, [input_height, input_width])
-    normalized = tf.divide(tf.subtract(resized, [input_mean]), [input_std])
-    sess = tf.Session()
-    result = sess.run(normalized)
-
-    return result
-
 def load_labels(label_file):
-    label = []
-    proto_as_ascii_lines = tf.gfile.GFile(label_file).readlines()
-    for l in proto_as_ascii_lines:
-        label.append(l.rstrip())
-    return label
+    with open(label_file, 'r') as f:
+        return [line.strip() for line in f.readlines()]
 
 class ClassifyDirectoryThread(QThread):
     count = pyqtSignal(int)
@@ -329,13 +305,14 @@ class MothID(QMainWindow):
 
     def chooseModelFile(self):
         global species_model, species_graph, species_labels
-        path = QFileDialog.getOpenFileName(self, "Choose a model file", "./models", "Models (*.pb)")
+        path = QFileDialog.getOpenFileName(self, "Choose a model file", "./models", "Models (*.tflite)")
         if(path[0]):
             file_model  = path[0]
-            file_labels = path[0].replace(".pb", ".txt");
+            file_labels = path[0].replace(".tflite", ".txt");
             if os.path.exists(file_labels):
                 species_model = file_model
-                species_graph = load_graph(file_model)
+                interpreter = tflite.Interpreter(model_path=species_model)
+                interpreter.allocate_tensors()
                 species_labels = load_labels(file_labels)
                 self.setWindowTitle("Moth ID - " + os.path.basename(species_model))
             else:
@@ -350,7 +327,9 @@ if __name__ == '__main__':
         QMessageBox.critical(None, "Error", "Could not find default model file.")
         sys.exit(-1)
 
-    species_graph = load_graph(species_model)
+    interpreter = tflite.Interpreter(model_path=species_model)
+    interpreter.allocate_tensors()
+
     species_labels = load_labels(species_labels)
 
     win = MothID()
