@@ -304,7 +304,7 @@ class MothID(QMainWindow):
             self.classifyDirectory(path)
 
     def chooseModelFile(self):
-        global species_model, species_graph, species_labels
+        global species_model, species_graph, species_labels, interpreter
         path = QFileDialog.getOpenFileName(self, "Choose a model file", "./models", "Models (*.tflite)")
         if(path[0]):
             file_model  = path[0]
